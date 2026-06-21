@@ -11,6 +11,7 @@ services:
       - "8000"
     volumes:
       - ./auth:/app/auth:ro
+      - ./data:/app/data
     networks:
       - anchenchat
 
