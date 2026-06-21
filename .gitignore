@@ -27,3 +27,4 @@ htmlcov/
 # Runtime and generated reports
 *.log
 evals/last*.json
+data/

@@ -4,7 +4,7 @@ from app.business_router import BusinessRouteDecision
 from app.config import Settings
 from app.openai_client import UpstreamServiceError
 from app.sales_intents import SalesIntent
-from app.sales_tools import OUT_OF_SCOPE_REPLY, SalesAnswer
+from app.sales_tools import OUT_OF_SCOPE_REPLY, AnswerStyle, SalesAnswer
 from app.sales_tools import answer_known_sales_intent as _answer_known_sales_intent
 from app.search_tools import WebSearchAnswer, answer_web_search_question
 
@@ -12,8 +12,9 @@ from app.search_tools import WebSearchAnswer, answer_web_search_question
 async def answer_known_sales_intent(
     intent: SalesIntent,
     settings: Settings | None = None,
+    answer_style: AnswerStyle = "concise",
 ) -> SalesAnswer:
-    return await _answer_known_sales_intent(intent, settings=settings)
+    return await _answer_known_sales_intent(intent, settings=settings, answer_style=answer_style)
 
 
 async def answer_web_search(

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from app.config import Settings
 from app.sales_db import (
@@ -15,6 +15,8 @@ from app.sales_db import (
 )
 from app.sales_intents import SalesIntent
 from app.sales_intents_llm import classify_sales_intent_decision
+
+AnswerStyle = Literal["concise", "detailed"]
 
 OUT_OF_SCOPE_REPLY = (
     "我是「安臣助手」的销售助手模式，目前我只能保守、准确地回答下面四类销售数据问题：\n"
@@ -63,8 +65,9 @@ class SalesAnswer:
 async def answer_sales_question(
     question: str,
     settings: Settings | None = None,
+    answer_style: AnswerStyle = "concise",
 ) -> SalesAnswer:
-    answer = await try_answer_sales_question(question, settings=settings)
+    answer = await try_answer_sales_question(question, settings=settings, answer_style=answer_style)
     if answer is None:
         return SalesAnswer(text=OUT_OF_SCOPE_REPLY, intent=None)
     return answer
@@ -73,6 +76,7 @@ async def answer_sales_question(
 async def try_answer_sales_question(
     question: str,
     settings: Settings | None = None,
+    answer_style: AnswerStyle = "concise",
 ) -> SalesAnswer | None:
     decision = await classify_sales_intent_decision(question, settings=settings)
     if decision.intent is None:
@@ -81,19 +85,20 @@ async def try_answer_sales_question(
         return None
 
     intent = decision.intent
-    return await answer_known_sales_intent(intent, settings=settings)
+    return await answer_known_sales_intent(intent, settings=settings, answer_style=answer_style)
 
 
 async def answer_known_sales_intent(
     intent: SalesIntent,
     settings: Settings | None = None,
+    answer_style: AnswerStyle = "concise",
 ) -> SalesAnswer:
     """Execute a sales query after a router has already validated the intent."""
 
     try:
         if intent.metric in ("store_revenue", "store_qty"):
             stores = await fetch_store_sales(intent.period, settings=settings)
-            text = _format_store_answer(intent, stores)
+            text = _format_store_answer(intent, stores, answer_style=answer_style)
             return SalesAnswer(
                 text=text,
                 intent=intent,
@@ -120,7 +125,11 @@ async def answer_known_sales_intent(
         )
 
 
-def _format_store_answer(intent: SalesIntent, rows: list[StoreSalesRow]) -> str:
+def _format_store_answer(
+    intent: SalesIntent,
+    rows: list[StoreSalesRow],
+    answer_style: AnswerStyle = "concise",
+) -> str:
     if not rows:
         return _empty_period_reply(intent.period_label)
 
@@ -128,6 +137,27 @@ def _format_store_answer(intent: SalesIntent, rows: list[StoreSalesRow]) -> str:
     total_revenue = sum(row.revenue for row in rows)
     total_qty = sum(row.qty for row in rows)
     total_tickets = sum(row.tickets for row in rows)
+    ranked = sorted(rows, key=lambda r: r.revenue if is_revenue else r.qty, reverse=True)
+
+    if answer_style == "concise":
+        top = ranked[0]
+        top_name = top.store_name or "(未维护门店)"
+        if is_revenue:
+            return (
+                f"{intent.period_label}共有 {len(rows)} 个门店产生销售，"
+                f"营业额合计 {_fmt_money(total_revenue)} 元，"
+                f"合计 {_fmt_int(total_tickets)} 笔交易。"
+                f"营业额最高的是{top_name}，营业额 {_fmt_money(top.revenue)} 元，"
+                f"售出 {_fmt_int(top.qty)} 件，{_fmt_int(top.tickets)} 笔小票。\n"
+                "如需详情，我可以进一步汇总所有门店信息给你。"
+            )
+        return (
+            f"{intent.period_label}共有 {len(rows)} 个门店产生销售，"
+            f"合计售出 {_fmt_int(total_qty)} 件，销售额 {_fmt_money(total_revenue)} 元。"
+            f"销售件数最多的是{top_name}，售出 {_fmt_int(top.qty)} 件，"
+            f"营业额 {_fmt_money(top.revenue)} 元，{_fmt_int(top.tickets)} 笔小票。\n"
+            "如需详情，我可以进一步汇总所有门店信息给你。"
+        )
 
     if is_revenue:
         headline = (
@@ -135,7 +165,6 @@ def _format_store_answer(intent: SalesIntent, rows: list[StoreSalesRow]) -> str:
             f"营业额合计 {_fmt_money(total_revenue)} 元，"
             f"合计 {_fmt_int(total_tickets)} 笔交易。"
         )
-        ranked = sorted(rows, key=lambda r: r.revenue, reverse=True)
         line_fmt = (
             "{rank}. {name}：营业额 {revenue} 元，售出 {qty} 件，{tickets} 笔小票。"
         )
@@ -145,7 +174,6 @@ def _format_store_answer(intent: SalesIntent, rows: list[StoreSalesRow]) -> str:
             f"合计售出 {_fmt_int(total_qty)} 件，"
             f"销售额 {_fmt_money(total_revenue)} 元。"
         )
-        ranked = sorted(rows, key=lambda r: r.qty, reverse=True)
         line_fmt = (
             "{rank}. {name}：售出 {qty} 件，营业额 {revenue} 元，{tickets} 笔小票。"
         )
@@ -164,6 +192,39 @@ def _format_store_answer(intent: SalesIntent, rows: list[StoreSalesRow]) -> str:
         detail_lines.append(f"... 其余 {len(ranked) - 20} 个门店已省略。")
 
     return headline + "\n" + "\n".join(detail_lines)
+
+
+def format_store_memory_details(intent: dict[str, Any], rows: list[dict[str, Any]]) -> str:
+    period_label = str(intent.get("period_label") or intent.get("period") or "上次查询")
+    metric = str(intent.get("metric") or "")
+    is_revenue = metric == "store_revenue"
+    normalized_rows = [
+        StoreSalesRow(
+            branch_id=_optional_str(row.get("branch_id")),
+            store_name=_optional_str(row.get("store_name")),
+                revenue=_to_number(row.get("revenue")),
+                qty=_to_number(row.get("qty")),
+            tickets=int(row.get("tickets") or 0),
+        )
+        for row in rows
+    ]
+    if not normalized_rows:
+        return "上一次销售查询没有可展开的门店明细。"
+    return _format_store_answer_with_label(
+        period_label=period_label,
+        metric="store_revenue" if is_revenue else "store_qty",
+        rows=normalized_rows,
+    )
+
+
+def _format_store_answer_with_label(
+    period_label: str,
+    metric: Literal["store_revenue", "store_qty"],
+    rows: list[StoreSalesRow],
+) -> str:
+    intent = SalesIntent(metric=metric, period="today", top_n=0, confidence=1.0)
+    text = _format_store_answer(intent, rows, answer_style="detailed")
+    return text.replace("今天", period_label, 1)
 
 
 def _format_product_answer(intent: SalesIntent, rows: list[ProductSalesRow]) -> str:
@@ -230,3 +291,18 @@ def _fmt_money(value: float) -> str:
 
 def _fmt_int(value: float) -> str:
     return f"{int(round(value)):,}"
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _to_number(value: Any) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0

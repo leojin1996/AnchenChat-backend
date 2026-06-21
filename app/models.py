@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
 
     device_id: str = Field(min_length=1, max_length=128)
     assistant_id: str = Field(min_length=1, max_length=64)
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=128)
     messages: list[ChatMessage] = Field(min_length=1, max_length=80)
     voice_mode: bool = False
 

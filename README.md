@@ -43,6 +43,7 @@ cp .env.example .env
 - `OPENAI_CHAT_MODEL`：聊天模型
 - `AUTH_JWT_SECRET`：JWT 签名密钥，生产环境必须使用 32 字节以上随机字符串
 - `BACKEND_CORS_ORIGINS`：前端域名，生产环境建议不要使用 `*`
+- `MEMORY_DB_PATH`：SQLite 记忆库路径，默认 `data/memory.sqlite3`
 - `HTTP_PORT`：Nginx 对外端口，默认 `80`
 
 可用下面命令生成 JWT 密钥：
@@ -90,6 +91,8 @@ users:
 - `SQL_SERVER_SCHEMA`
 - `SQL_SERVER_CHARSET`：云端容器如果出现门店/商品名乱码，设为 `CP936`
 - `SQL_SERVER_QUERY_TIMEOUT`
+
+销售问答会默认先给简洁结论，并把同一 `user_phone + device_id + conversation_id` 下的上一次销售查询结果写入 SQLite；用户追问“详情”时会展开上一次结果。回答风格偏好按 `user_phone + device_id` 保存，跨会话生效，但不同设备互不影响。云端部署建议把 `data/` 目录挂载到宿主机，避免容器重建后丢失记忆库。
 
 如果需要联网搜索功能，配置：
 

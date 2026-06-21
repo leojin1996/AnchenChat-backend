@@ -79,7 +79,7 @@ def create_app(
     ) -> StreamingResponse:
         ensure_allowed(limiter, _rate_key(user, request.device_id))
         return StreamingResponse(
-            stream_chat_events(request, client, format_sse, active_settings),
+            stream_chat_events(request, client, format_sse, active_settings, user.phone),
             media_type="text/event-stream",
         )
 
@@ -91,7 +91,7 @@ def create_app(
     ) -> StreamingResponse:
         ensure_allowed(limiter, _rate_key(user, request.device_id))
         return StreamingResponse(
-            stream_chat_events(request, client, format_ndjson, active_settings),
+            stream_chat_events(request, client, format_ndjson, active_settings, user.phone),
             media_type="application/x-ndjson",
         )
 
@@ -102,7 +102,7 @@ def create_app(
         user: CurrentUser = Depends(require_user),
     ) -> ChatCompleteResponse:
         ensure_allowed(limiter, _rate_key(user, request.device_id))
-        return await collect_chat_response(request, client, active_settings)
+        return await collect_chat_response(request, client, active_settings, user.phone)
 
     @app.post("/audio/transcribe")
     async def transcribe_audio(
@@ -196,9 +196,15 @@ async def stream_chat_events(
     client: object,
     formatter: callable,
     settings: Settings | None = None,
+    user_phone: str = "anonymous",
 ) -> AsyncIterator[str]:
     try:
-        async for event in stream_agent_graph_events(request, client, settings=settings):
+        async for event in stream_agent_graph_events(
+            request,
+            client,
+            settings=settings,
+            user_phone=user_phone,
+        ):
             yield formatter(event)
     except Exception as exc:  # pragma: no cover - exercised in real OpenAI failures.
         yield formatter(StreamEvent(type="error", text=str(exc)))
@@ -208,9 +214,10 @@ async def collect_chat_response(
     request: ChatRequest,
     client: object,
     settings: Settings | None = None,
+    user_phone: str = "anonymous",
 ) -> ChatCompleteResponse:
     try:
-        result = await run_agent_graph(request, client, settings=settings)
+        result = await run_agent_graph(request, client, settings=settings, user_phone=user_phone)
     except UpstreamServiceError as exc:
         raise coded_http_error(502, exc.code, exc.message) from exc
     except Exception as exc:  # pragma: no cover - exercised in real OpenAI failures.

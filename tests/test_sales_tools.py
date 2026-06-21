@@ -137,6 +137,44 @@ async def test_store_revenue_uses_db_rows(
     assert answer.rows[0]["store_name"] == "徐家汇店"
     assert "徐家汇店" in answer.text
     assert "12,000.50" in answer.text
+    assert "如需详情" in answer.text
+
+
+async def test_store_qty_concise_answer_only_names_top_store(
+    stub_store_sales: list[StoreSalesRow],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import sales_tools
+
+    monkeypatch.setattr(sales_tools, "fetch_store_sales", sales_db.fetch_store_sales)
+    stub_decision(
+        monkeypatch,
+        SalesIntent(metric="store_qty", period="this_week", top_n=0, confidence=0.85),
+    )
+
+    answer = await answer_sales_question("本周哪家店销售件数最多？")
+
+    assert "本周共有 2 个门店产生销售" in answer.text
+    assert "销售件数最多的是徐家汇店" in answer.text
+    assert "人民广场店" not in answer.text
+    assert "如需详情" in answer.text
+
+
+async def test_store_qty_detailed_answer_lists_all_stores(
+    stub_store_sales: list[StoreSalesRow],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app import sales_tools
+
+    monkeypatch.setattr(sales_tools, "fetch_store_sales", sales_db.fetch_store_sales)
+
+    answer = await sales_tools.answer_known_sales_intent(
+        SalesIntent(metric="store_qty", period="this_week", top_n=0, confidence=0.85),
+        answer_style="detailed",
+    )
+
+    assert "1. 徐家汇店" in answer.text
+    assert "2. 人民广场店" in answer.text
 
 
 async def test_top_qty_uses_db_rows(

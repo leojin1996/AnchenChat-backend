@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     requests_per_minute: int = Field(default=30, validation_alias="REQUESTS_PER_MINUTE")
     max_audio_bytes: int = Field(default=15 * 1024 * 1024, validation_alias="MAX_AUDIO_BYTES")
     backend_cors_origins: str = Field(default="*", validation_alias="BACKEND_CORS_ORIGINS")
+    memory_db_path: str = Field(default="data/memory.sqlite3", validation_alias="MEMORY_DB_PATH")
 
     sql_server_host_name: str = Field(default="", validation_alias="SQL_SERVER_HOST_NAME")
     sql_server_user_name: str = Field(default="", validation_alias="SQL_SERVER_USER_NAME")

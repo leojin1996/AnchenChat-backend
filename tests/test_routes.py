@@ -311,7 +311,12 @@ def test_sales_ask_route_returns_text_and_rows(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_chat_complete_routes_sales_assistant(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _stub(request, client, settings=None) -> AgentGraphResult:
+    async def _stub(
+        request,
+        client,
+        settings=None,
+        user_phone: str = "anonymous",
+    ) -> AgentGraphResult:
         assert request.assistant_id == "sales"
         return AgentGraphResult(text="今天 1 家门店营业额 100 元。", route="supported_sales")
 
@@ -335,7 +340,12 @@ def test_chat_complete_routes_sales_assistant(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_chat_complete_routes_sales_question_internally(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _stub(request, client, settings=None) -> AgentGraphResult:
+    async def _stub(
+        request,
+        client,
+        settings=None,
+        user_phone: str = "anonymous",
+    ) -> AgentGraphResult:
         assert request.messages[-1].content == "今天营业额"
         return AgentGraphResult(
             text="今天共有 1 个门店产生销售。",
@@ -362,7 +372,12 @@ def test_chat_complete_routes_sales_question_internally(monkeypatch: pytest.Monk
 
 
 def test_chat_complete_routes_web_search_internally(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _stub(request, client, settings=None) -> AgentGraphResult:
+    async def _stub(
+        request,
+        client,
+        settings=None,
+        user_phone: str = "anonymous",
+    ) -> AgentGraphResult:
         assert request.messages[-1].content == "查一下今天 AI 新闻"
         return AgentGraphResult(
             text="今天 AI 新闻摘要。",
@@ -395,7 +410,7 @@ def test_chat_complete_routes_web_search_internally(monkeypatch: pytest.MonkeyPa
 
 
 def test_chat_stream_chunks_routes_sales_assistant(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def _stub(request, client, settings=None):
+    async def _stub(request, client, settings=None, user_phone: str = "anonymous"):
         assert request.assistant_id == "sales"
         yield StreamEvent(type="delta", text="本周共有 2 个门店产生销售。")
         yield StreamEvent(type="done")

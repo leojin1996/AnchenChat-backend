@@ -30,6 +30,7 @@ def _request(question: str, assistant_id: str = "general") -> ChatRequest:
     return ChatRequest(
         device_id="device-1",
         assistant_id=assistant_id,
+        conversation_id="conversation-1",
         messages=[ChatMessage(role="user", content=question)],
     )
 
@@ -55,7 +56,11 @@ async def test_graph_dispatches_supported_sales(
             ),
         )
 
-    async def _sales(intent: SalesIntent, settings: Settings | None = None) -> SalesAnswer:
+    async def _sales(
+        intent: SalesIntent,
+        settings: Settings | None = None,
+        answer_style: str = "concise",
+    ) -> SalesAnswer:
         assert intent.metric == "store_revenue"
         return SalesAnswer(text="今天销售额 100 元。", intent=intent, rows=[])
 
@@ -130,3 +135,181 @@ async def test_graph_dispatches_unsupported_business_refusal(
     assert result.used_search is False
     assert "财务" in result.text
     assert "不会编造" in result.text
+
+
+async def test_sales_detail_followup_uses_previous_sales_memory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    settings = Settings(
+        openai_api_key="",
+        openai_router_model="",
+        memory_db_path=str(tmp_path / "memory.sqlite3"),
+    )
+
+    async def _route(question: str, settings: Settings | None = None) -> BusinessRouteDecision:
+        return BusinessRouteDecision(
+            route="supported_sales",
+            sales_intent=SalesIntent(
+                metric="store_qty",
+                period="this_week",
+                top_n=0,
+                confidence=0.9,
+            ),
+        )
+
+    async def _sales(
+        intent: SalesIntent,
+        settings: Settings | None = None,
+        answer_style: str = "concise",
+    ) -> SalesAnswer:
+        assert answer_style == "concise"
+        return SalesAnswer(
+            text="本周销售件数最多的是徐家汇店。如需详情，我可以进一步汇总所有门店信息给你。",
+            intent=intent,
+            rows=[
+                {
+                    "branch_id": "001",
+                    "store_name": "徐家汇店",
+                    "revenue": 1200.0,
+                    "qty": 42,
+                    "tickets": 8,
+                },
+                {
+                    "branch_id": "002",
+                    "store_name": "人民广场店",
+                    "revenue": 900.0,
+                    "qty": 27,
+                    "tickets": 6,
+                },
+            ],
+        )
+
+    monkeypatch.setattr("app.agent_graph.classify_business_route", _route)
+    monkeypatch.setattr("app.business_agents.answer_known_sales_intent", _sales)
+
+    await run_agent_graph(
+        _request("本周哪家店销售件数最多？", assistant_id="sales"),
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+    detail = await run_agent_graph(
+        _request("详情", assistant_id="sales"),
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+
+    assert detail.route == "supported_sales"
+    assert "徐家汇店" in detail.text
+    assert "人民广场店" in detail.text
+
+
+async def test_sales_detail_followup_is_isolated_by_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    settings = Settings(
+        openai_api_key="",
+        openai_router_model="",
+        memory_db_path=str(tmp_path / "memory.sqlite3"),
+    )
+
+    async def _route(question: str, settings: Settings | None = None) -> BusinessRouteDecision:
+        return BusinessRouteDecision(
+            route="supported_sales",
+            sales_intent=SalesIntent(
+                metric="store_qty",
+                period="this_week",
+                top_n=0,
+                confidence=0.9,
+            ),
+        )
+
+    async def _sales(
+        intent: SalesIntent,
+        settings: Settings | None = None,
+        answer_style: str = "concise",
+    ) -> SalesAnswer:
+        return SalesAnswer(
+            text="本周销售件数最多的是徐家汇店。如需详情，我可以进一步汇总所有门店信息给你。",
+            intent=intent,
+            rows=[{"branch_id": "001", "store_name": "徐家汇店", "revenue": 1200.0, "qty": 42}],
+        )
+
+    monkeypatch.setattr("app.agent_graph.classify_business_route", _route)
+    monkeypatch.setattr("app.business_agents.answer_known_sales_intent", _sales)
+
+    await run_agent_graph(
+        _request("本周哪家店销售件数最多？", assistant_id="sales"),
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+    other_conversation = ChatRequest(
+        device_id="device-1",
+        assistant_id="sales",
+        conversation_id="conversation-2",
+        messages=[ChatMessage(role="user", content="详情")],
+    )
+
+    detail = await run_agent_graph(
+        other_conversation,
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+
+    assert "还没有可展开的上一次销售查询" in detail.text
+
+
+async def test_sales_answer_style_preference_is_remembered(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    settings = Settings(
+        openai_api_key="",
+        openai_router_model="",
+        memory_db_path=str(tmp_path / "memory.sqlite3"),
+    )
+    captured_styles: list[str] = []
+
+    async def _route(question: str, settings: Settings | None = None) -> BusinessRouteDecision:
+        return BusinessRouteDecision(
+            route="supported_sales",
+            sales_intent=SalesIntent(
+                metric="store_revenue",
+                period="today",
+                top_n=0,
+                confidence=0.9,
+            ),
+        )
+
+    async def _sales(
+        intent: SalesIntent,
+        settings: Settings | None = None,
+        answer_style: str = "concise",
+    ) -> SalesAnswer:
+        captured_styles.append(answer_style)
+        return SalesAnswer(text=f"style={answer_style}", intent=intent, rows=[])
+
+    monkeypatch.setattr("app.agent_graph.classify_business_route", _route)
+    monkeypatch.setattr("app.business_agents.answer_known_sales_intent", _sales)
+
+    preference = await run_agent_graph(
+        _request("以后都详细一点", assistant_id="sales"),
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+    answer = await run_agent_graph(
+        _request("今天营业额", assistant_id="sales"),
+        FakeOpenAIClient(),
+        settings=settings,
+        user_phone="13800138000",
+    )
+
+    assert "详细" in preference.text
+    assert answer.text == "style=detailed"
+    assert captured_styles == ["detailed"]

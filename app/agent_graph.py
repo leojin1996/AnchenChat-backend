@@ -8,9 +8,10 @@ from langgraph.graph import END, StateGraph
 from app import business_agents
 from app.business_router import BusinessRouteDecision, classify_business_route
 from app.config import Settings, get_settings
+from app.memory_store import MemoryStore, SalesMemory
 from app.models import ChatRequest
 from app.openai_client import StreamEvent
-from app.sales_tools import OUT_OF_SCOPE_REPLY
+from app.sales_tools import OUT_OF_SCOPE_REPLY, format_store_memory_details
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,7 @@ class AgentGraphState(TypedDict, total=False):
     citations: list[dict[str, str]]
     used_search: bool
     intent: dict[str, Any] | None
+    user_phone: str
 
 
 SALES_ASSISTANT_ID = "sales"
@@ -43,6 +45,7 @@ async def run_agent_graph(
     request: ChatRequest,
     client: object,
     settings: Settings | None = None,
+    user_phone: str = "anonymous",
 ) -> AgentGraphResult:
     active_settings = settings or get_settings()
     initial: AgentGraphState = {
@@ -55,6 +58,7 @@ async def run_agent_graph(
         "used_search": False,
         "route": "general_chat",
         "text": "",
+        "user_phone": user_phone,
     }
     result = await _compiled_graph().ainvoke(initial)
     return AgentGraphResult(
@@ -70,8 +74,9 @@ async def stream_agent_graph_events(
     request: ChatRequest,
     client: object,
     settings: Settings | None = None,
+    user_phone: str = "anonymous",
 ) -> Any:
-    result = await run_agent_graph(request, client, settings=settings)
+    result = await run_agent_graph(request, client, settings=settings, user_phone=user_phone)
     if result.text:
         yield StreamEvent(type="delta", text=result.text)
     for citation in result.citations:
@@ -114,6 +119,14 @@ async def _router_node(state: AgentGraphState) -> AgentGraphState:
     request = state["request"]
     question = state.get("question", "")
     settings = state["settings"]
+    if _is_sales_detail_followup(question) or _sales_answer_style_preference(question) is not None:
+        return {
+            "decision": BusinessRouteDecision(
+                route="supported_sales",
+                reason="sales memory request",
+            ),
+            "route": "supported_sales",
+        }
     decision = await classify_business_route(question, settings=settings)
 
     if request.assistant_id == SALES_ASSISTANT_ID and decision.route != "supported_sales":
@@ -138,18 +151,69 @@ def _next_node(state: AgentGraphState) -> Literal["sales", "search", "general", 
 
 async def _sales_node(state: AgentGraphState) -> AgentGraphState:
     decision = state["decision"]
+    request = state["request"]
+    settings = state["settings"]
+    memory_store = MemoryStore(settings.memory_db_path)
+    user_phone = state.get("user_phone", "anonymous")
+    conversation_id = _conversation_id(request)
+    preference = _sales_answer_style_preference(state.get("question", ""))
+
+    if preference is not None:
+        memory_store.set_preference(
+            user_phone,
+            request.device_id,
+            "sales_answer_style",
+            preference,
+        )
+        label = "详细" if preference == "detailed" else "简洁"
+        return {
+            "text": f"好的，我已记住：以后这个设备上的销售数据默认用{label}方式回答。",
+            "used_search": False,
+        }
+
+    if _is_sales_detail_followup(state.get("question", "")):
+        memory = memory_store.get_sales_memory(user_phone, request.device_id, conversation_id)
+        if memory is None:
+            return {
+                "text": "我还没有可展开的上一次销售查询。你可以先问一个销售数据问题。",
+                "used_search": False,
+            }
+        return {
+            "text": format_store_memory_details(memory.intent, memory.rows),
+            "used_search": False,
+            "intent": memory.intent,
+        }
+
     if decision.sales_intent is None:
         return {"text": OUT_OF_SCOPE_REPLY, "used_search": False}
 
+    answer_style = memory_store.get_preference(
+        user_phone,
+        request.device_id,
+        "sales_answer_style",
+    ) or "concise"
     answer = await business_agents.answer_known_sales_intent(
         decision.sales_intent,
-        settings=state["settings"],
+        settings=settings,
+        answer_style="detailed" if answer_style == "detailed" else "concise",
     )
+    intent_dict = answer.to_dict().get("intent") or {}
+    if answer.rows:
+        memory_store.save_sales_memory(
+            SalesMemory(
+                user_phone=user_phone,
+                device_id=request.device_id,
+                conversation_id=conversation_id,
+                intent=dict(intent_dict),
+                rows=answer.rows,
+                answer_summary=answer.text,
+            )
+        )
     return {
         "text": answer.text,
         "citations": [],
         "used_search": False,
-        "intent": answer.to_dict().get("intent"),
+        "intent": intent_dict,
     }
 
 
@@ -196,3 +260,48 @@ def _last_user_question(request: ChatRequest) -> str:
 
 def _build_messages(request: ChatRequest) -> list[dict[str, str]]:
     return [{"role": message.role, "content": message.content} for message in request.messages]
+
+
+def _conversation_id(request: ChatRequest) -> str:
+    return request.conversation_id or f"{request.assistant_id}:{request.device_id}"
+
+
+def _is_sales_detail_followup(question: str) -> bool:
+    normalized = question.strip()
+    if not normalized:
+        return False
+    detail_keywords = (
+        "详情",
+        "详细",
+        "展开",
+        "展开说",
+        "所有门店",
+        "全部门店",
+        "全部列出来",
+        "都列出来",
+        "完整",
+    )
+    return any(keyword in normalized for keyword in detail_keywords)
+
+
+def _sales_answer_style_preference(question: str) -> str | None:
+    normalized = question.strip()
+    detailed_markers = (
+        "以后都详细",
+        "以后详细",
+        "默认详细",
+        "以后展开",
+        "以后都展开",
+    )
+    concise_markers = (
+        "以后都简单",
+        "以后简单",
+        "以后简洁",
+        "默认简洁",
+        "默认简单",
+    )
+    if any(marker in normalized for marker in detailed_markers):
+        return "detailed"
+    if any(marker in normalized for marker in concise_markers):
+        return "concise"
+    return None
