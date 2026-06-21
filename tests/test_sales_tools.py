@@ -34,6 +34,35 @@ def test_store_sales_sql_filters_zero_sale_rows_and_prefers_full_name() -> None:
     assert "COUNT(DISTINCT bd.Vchcode)" not in sql
 
 
+def test_sql_connection_uses_configured_charset(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeConnection:
+        def close(self) -> None:
+            captured["closed"] = True
+
+    def fake_connect(**kwargs: Any) -> FakeConnection:
+        captured.update(kwargs)
+        return FakeConnection()
+
+    monkeypatch.setattr(sales_db.pymssql, "connect", fake_connect)
+    settings = sales_db.Settings(
+        sql_server_host_name="127.0.0.1,1433",
+        sql_server_user_name="readonly",
+        sql_server_user_password="secret",
+        sql_server_database="retail",
+        sql_server_charset="CP936",
+    )
+
+    with sales_db._connection(settings):
+        pass
+
+    assert captured["server"] == "127.0.0.1"
+    assert captured["port"] == 1433
+    assert captured["charset"] == "CP936"
+    assert captured["closed"] is True
+
+
 @pytest.fixture
 def stub_top_products(monkeypatch: pytest.MonkeyPatch) -> list[ProductSalesRow]:
     rows = [

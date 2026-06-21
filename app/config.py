@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     sql_server_user_password: str = Field(default="", validation_alias="SQL_SERVER_USER_PASSWORD")
     sql_server_database: str = Field(default="", validation_alias="SQL_SERVER_DATABASE")
     sql_server_schema: str = Field(default="dbo", validation_alias="SQL_SERVER_SCHEMA")
+    sql_server_charset: str = Field(default="UTF-8", validation_alias="SQL_SERVER_CHARSET")
     sql_server_include_freeze: bool = Field(
         default=False, validation_alias="SQL_SERVER_INCLUDE_FREEZE"
     )

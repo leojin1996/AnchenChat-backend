@@ -143,7 +143,7 @@ def _connection(settings: Settings) -> Iterator[Any]:
             database=settings.sql_server_database,
             timeout=settings.sql_server_query_timeout,
             login_timeout=15,
-            charset="UTF-8",
+            charset=settings.sql_server_charset or "UTF-8",
             as_dict=True,
         )
     except pymssql.Error as exc:

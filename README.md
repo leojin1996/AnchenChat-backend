@@ -88,6 +88,7 @@ users:
 - `SQL_SERVER_USER_PASSWORD`
 - `SQL_SERVER_DATABASE`
 - `SQL_SERVER_SCHEMA`
+- `SQL_SERVER_CHARSET`：云端容器如果出现门店/商品名乱码，设为 `CP936`
 - `SQL_SERVER_QUERY_TIMEOUT`
 
 如果需要联网搜索功能，配置：
