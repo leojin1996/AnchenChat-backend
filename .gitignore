@@ -1,0 +1,29 @@
+.DS_Store
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+auth/allowlist.yaml
+
+# Python caches and virtual environments
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Build and coverage output
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Runtime and generated reports
+*.log
+evals/last*.json

@@ -1,0 +1,10 @@
+# 复制为 allowlist.yaml 并填入实际手机号即可启用登录。
+# - phone: 中国大陆手机号（11 位，可带 +86）
+# - name:  在客户端显示的名称
+# - role:  可选，默认 "user"；如需要区分管理员可写 "admin"
+users:
+  - phone: "13800138000"
+    name: "示例用户A"
+    role: "admin"
+  - phone: "13900139000"
+    name: "示例用户B"
