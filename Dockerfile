@@ -10,7 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
+RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -18,10 +19,19 @@ RUN apt-get update \
         gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
-
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN python -m pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple \
+        "fastapi>=0.124.0" \
+        "httpx>=0.28.1" \
+        "langgraph>=1.2.6" \
+        "pydantic>=2.12.0" \
+        "pydantic-settings>=2.12.0" \
+        "pyjwt>=2.10.0" \
+        "pymssql>=2.3.0" \
+        "python-multipart>=0.0.20" \
+        "pyyaml>=6.0.0" \
+        "sse-starlette>=3.0.3" \
+        "uvicorn[standard]>=0.38.0"
 
 COPY app ./app
 COPY auth ./auth
