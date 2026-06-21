@@ -59,8 +59,12 @@ openssl rand -hex 32
 - `ALIYUN_SMS_ACCESS_KEY_SECRET`
 - `ALIYUN_SMS_SIGN_NAME`
 - `ALIYUN_SMS_TEMPLATE_CODE`
+- `ALIYUN_SMS_ENDPOINT=https://dypnsapi.aliyuncs.com`
+- `ALIYUN_SMS_SCHEME_NAME`：可选；如果发送接口配置了方案名称，校验时必须使用同一个方案名称
 
 生产环境不要配置 `AUTH_DEV_BYPASS_CODE`。
+
+短信登录使用阿里云号码认证服务 `Dypnsapi` 的 `SendSmsVerifyCode` 发送验证码，并用 `CheckSmsVerifyCode` 校验验证码。模板参数默认使用 `{"code":"##code##"}`，验证码由阿里云生成和托管。
 
 创建登录白名单：
 

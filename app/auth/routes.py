@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth.context import AuthContext
 from app.auth.dependencies import CurrentUser, build_current_user_dependency
 from app.auth.errors import AuthError
+from app.auth.sms import SmsCodeVerifier
 from app.models import (
     AuthUserInfo,
     SmsSendRequest,
@@ -73,11 +74,18 @@ async def _verify_sms(ctx: AuthContext, payload: SmsVerifyRequest) -> SmsVerifyR
     bypass = ctx.settings.auth_dev_bypass_code.strip()
     if bypass and submitted == bypass:
         await ctx.codes.invalidate(phone)
+    elif isinstance(ctx.sms, SmsCodeVerifier):
+        try:
+            await ctx.sms.verify_code(phone, submitted)
+            await ctx.codes.invalidate(phone)
+        except AuthError as exc:
+            status = _verify_error_status(exc)
+            raise _http_error(status, exc.code, exc.message) from exc
     else:
         try:
             await ctx.codes.verify(phone, submitted)
         except AuthError as exc:
-            status = 401 if exc.code != "auth_code_missing" else 400
+            status = _verify_error_status(exc)
             raise _http_error(status, exc.code, exc.message) from exc
 
     token, expires_at = ctx.tokens.issue(entry.phone, entry.name, entry.role)
@@ -99,6 +107,16 @@ def _normalize_or_400(raw_phone: str) -> str:
 
 def _http_error(status_code: int, code: str, message: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+def _verify_error_status(exc: AuthError) -> int:
+    if exc.code == "auth_code_missing":
+        return 400
+    if exc.code in {"auth_code_invalid", "auth_code_expired", "auth_code_exhausted"}:
+        return 401
+    if exc.code.startswith("auth_sms_"):
+        return 502
+    return 400
 
 
 # Convenience type re-export for callers wiring guard dependency without ctx.

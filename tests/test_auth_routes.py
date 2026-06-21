@@ -101,6 +101,32 @@ def test_verify_sms_returns_token_on_success() -> None:
     assert body["user"] == {"phone": PHONE, "name": NAME, "role": "admin"}
 
 
+def test_verify_sms_uses_provider_when_available() -> None:
+    class ProviderBackedSender:
+        def __init__(self) -> None:
+            self.sent: list[tuple[str, str]] = []
+            self.verified: list[tuple[str, str]] = []
+
+        async def send_code(self, phone: str, code: str) -> None:
+            self.sent.append((phone, code))
+
+        async def verify_code(self, phone: str, code: str) -> None:
+            self.verified.append((phone, code))
+
+    sender = ProviderBackedSender()
+    client, _ = build_app(sms_sender=sender)
+    client.post("/auth/sms/send", json={"phone": PHONE})
+
+    response = client.post(
+        "/auth/sms/verify",
+        json={"phone": PHONE, "code": "654321"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["phone"] == PHONE
+    assert sender.verified == [(PHONE, "654321")]
+
+
 def test_verify_sms_rejects_wrong_code() -> None:
     client, _ = build_app()
     client.post("/auth/sms/send", json={"phone": PHONE})

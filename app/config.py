@@ -100,8 +100,16 @@ class Settings(BaseSettings):
     aliyun_sms_sign_name: str = Field(default="", validation_alias="ALIYUN_SMS_SIGN_NAME")
     aliyun_sms_template_code: str = Field(default="", validation_alias="ALIYUN_SMS_TEMPLATE_CODE")
     aliyun_sms_endpoint: str = Field(
-        default="https://dysmsapi.aliyuncs.com",
+        default="https://dypnsapi.aliyuncs.com",
         validation_alias="ALIYUN_SMS_ENDPOINT",
+    )
+    aliyun_sms_scheme_name: str = Field(default="", validation_alias="ALIYUN_SMS_SCHEME_NAME")
+    aliyun_sms_country_code: str = Field(default="86", validation_alias="ALIYUN_SMS_COUNTRY_CODE")
+    aliyun_sms_code_length: int = Field(default=6, validation_alias="ALIYUN_SMS_CODE_LENGTH")
+    aliyun_sms_code_type: int = Field(default=1, validation_alias="ALIYUN_SMS_CODE_TYPE")
+    aliyun_sms_case_auth_policy: int = Field(
+        default=1,
+        validation_alias="ALIYUN_SMS_CASE_AUTH_POLICY",
     )
     aliyun_sms_timeout: float = Field(default=10.0, validation_alias="ALIYUN_SMS_TIMEOUT")
 
