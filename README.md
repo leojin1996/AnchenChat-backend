@@ -67,6 +67,14 @@ openssl rand -hex 32
 
 短信登录使用阿里云号码认证服务 `Dypnsapi` 的 `SendSmsVerifyCode` 发送验证码，并用 `CheckSmsVerifyCode` 校验验证码。模板参数默认使用 `{"code":"##code##"}`，验证码由阿里云生成和托管。
 
+## 微信小程序登录
+
+小程序登录需要配置 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`，这两个值来自微信公众平台。首次微信登录时，如果 openid 还没有绑定白名单手机号，后端会返回 `bind_session_id`；前端随后调用现有 `/auth/sms/send` 发送短信验证码，再调用 `/auth/wechat/sms/verify` 完成绑定并获取 JWT。
+
+绑定关系默认写入 `auth/wechat_bindings.json`。该文件只保存 `openid -> phone`，每次签发 JWT 前仍会检查 `auth/allowlist.yaml`，因此管理员从白名单移除手机号后，已绑定微信也不能继续登录。
+
+生产小程序必须在微信公众平台配置 HTTPS 后端域名为 request、upload 和 download 合法域名。
+
 创建登录白名单：
 
 ```bash

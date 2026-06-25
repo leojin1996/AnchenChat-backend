@@ -6,6 +6,7 @@ def test_settings_use_secure_defaults() -> None:
 
     assert settings.openai_chat_model == "gpt-5.5"
     assert settings.openai_transcribe_model == "whisper-1"
+    assert settings.openai_transcribe_fallback_model == "gpt-4o-mini-transcribe"
     assert settings.openai_transcribe_language == "zh"
     assert settings.openai_tts_model == "gpt-4o-mini-tts"
     assert settings.openai_tts_voice == "alloy"

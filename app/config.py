@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     openai_transcribe_model: str = Field(
         default="whisper-1",
         validation_alias="OPENAI_TRANSCRIBE_MODEL",
+    )
+    openai_transcribe_fallback_model: str = Field(
+        default="gpt-4o-mini-transcribe",
+        validation_alias="OPENAI_TRANSCRIBE_FALLBACK_MODEL",
     )
     openai_transcribe_language: str = Field(
         default="zh",
@@ -51,6 +55,21 @@ class Settings(BaseSettings):
         default=0.8,
         validation_alias="OPENAI_RETRY_BACKOFF_SECONDS",
     )
+    asr_provider: str = Field(default="openai", validation_alias="ASR_PROVIDER")
+    tencent_secret_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("TENCENT_SECRET_ID", "TC_SECRET_ID"),
+    )
+    tencent_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("TENCENT_SECRET_KEY", "TC_SECRET_KEY"),
+    )
+    tencent_asr_engine: str = Field(default="16k_zh", validation_alias="TENCENT_ASR_ENGINE")
+    tencent_asr_endpoint: str = Field(
+        default="asr.tencentcloudapi.com",
+        validation_alias="TENCENT_ASR_ENDPOINT",
+    )
+    tencent_asr_timeout: float = Field(default=30.0, validation_alias="TENCENT_ASR_TIMEOUT")
     tavily_api_key: str = Field(default="", validation_alias="TAVILY_API_KEY")
     tavily_base_url: str = Field(
         default="https://api.tavily.com",
@@ -93,6 +112,20 @@ class Settings(BaseSettings):
     auth_code_max_attempts: int = Field(default=5, validation_alias="AUTH_CODE_MAX_ATTEMPTS")
     auth_sms_hourly_limit: int = Field(default=5, validation_alias="AUTH_SMS_HOURLY_LIMIT")
     auth_dev_bypass_code: str = Field(default="", validation_alias="AUTH_DEV_BYPASS_CODE")
+    wechat_app_id: str = Field(default="", validation_alias="WECHAT_APP_ID")
+    wechat_app_secret: str = Field(default="", validation_alias="WECHAT_APP_SECRET")
+    wechat_code2session_url: str = Field(
+        default="https://api.weixin.qq.com/sns/jscode2session",
+        validation_alias="WECHAT_CODE2SESSION_URL",
+    )
+    auth_wechat_bindings_path: str = Field(
+        default="auth/wechat_bindings.json",
+        validation_alias="AUTH_WECHAT_BINDINGS_PATH",
+    )
+    auth_wechat_bind_ttl_seconds: int = Field(
+        default=300,
+        validation_alias="AUTH_WECHAT_BIND_TTL_SECONDS",
+    )
 
     aliyun_sms_access_key_id: str = Field(default="", validation_alias="ALIYUN_SMS_ACCESS_KEY_ID")
     aliyun_sms_access_key_secret: str = Field(

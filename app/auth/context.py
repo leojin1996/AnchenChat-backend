@@ -7,6 +7,7 @@ from app.auth.codes import VerificationCodeStore
 from app.auth.errors import AuthConfigError
 from app.auth.sms import SmsSender, build_sms_sender
 from app.auth.tokens import TokenService
+from app.auth.wechat import WechatAuthService, build_wechat_auth_service
 from app.config import Settings
 
 
@@ -18,12 +19,14 @@ class AuthContext:
     codes: VerificationCodeStore
     tokens: TokenService
     sms: SmsSender
+    wechat: WechatAuthService
 
 
 def build_auth_context(
     settings: Settings,
     allowlist: Allowlist | None = None,
     sms_sender: SmsSender | None = None,
+    wechat_service: WechatAuthService | None = None,
 ) -> AuthContext:
     """Wire the auth subsystem. Tests can inject allowlist/sms overrides."""
 
@@ -42,6 +45,7 @@ def build_auth_context(
             ),
             tokens=TokenService(secret=secret, ttl_seconds=settings.auth_jwt_ttl_seconds),
             sms=sms_sender or build_sms_sender(settings),
+            wechat=wechat_service or build_wechat_auth_service(settings),
         )
 
     if not settings.auth_jwt_secret.strip():
@@ -70,4 +74,5 @@ def build_auth_context(
             ttl_seconds=settings.auth_jwt_ttl_seconds,
         ),
         sms=sms_sender or build_sms_sender(settings),
+        wechat=wechat_service or build_wechat_auth_service(settings),
     )

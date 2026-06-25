@@ -68,6 +68,7 @@ def build_client(settings: Settings | None = None) -> tuple[TestClient, str]:
     app = create_app(
         settings=active_settings,
         openai_client=FakeOpenAIClient(),
+        audio_transcriber=FakeOpenAIClient(),
         auth_context=auth_ctx,
     )
     token, _ = auth_ctx.tokens.issue(TEST_PHONE, TEST_NAME, "admin")
@@ -261,6 +262,20 @@ def test_transcribe_route_rejects_large_audio() -> None:
 
     assert response.status_code == 413
     assert response.json()["detail"]["code"] == "audio_too_large"
+
+
+def test_transcribe_route_rejects_empty_audio() -> None:
+    client, token = build_client()
+
+    response = client.post(
+        "/audio/transcribe",
+        headers=auth_headers(token),
+        data={"device_id": "device-1"},
+        files={"file": ("voice.mp3", b"", "audio/mpeg")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "audio_empty"
 
 
 def test_speech_route_returns_audio() -> None:

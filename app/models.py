@@ -111,3 +111,26 @@ class SmsVerifyResponse(BaseModel):
     token: str
     expires_at: int
     user: AuthUserInfo
+
+
+class WechatLoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1, max_length=256)
+
+
+class WechatLoginResponse(BaseModel):
+    status: str
+    token: str | None = None
+    expires_at: int | None = None
+    user: AuthUserInfo | None = None
+    bind_session_id: str | None = None
+    expires_in: int | None = None
+
+
+class WechatSmsVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bind_session_id: str = Field(min_length=1, max_length=128)
+    phone: str = Field(min_length=1, max_length=32)
+    code: str = Field(min_length=4, max_length=8)

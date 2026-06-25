@@ -15,6 +15,7 @@ RUN sed -i 's|http://deb.debian.org/debian|http://mirrors.aliyun.com/debian|g' /
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        ffmpeg \
         freetds-dev \
         gcc \
     && rm -rf /var/lib/apt/lists/*
@@ -31,6 +32,7 @@ RUN python -m pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simp
         "python-multipart>=0.0.20" \
         "pyyaml>=6.0.0" \
         "sse-starlette>=3.0.3" \
+        "tencentcloud-sdk-python-asr>=3.1.112" \
         "uvicorn[standard]>=0.38.0"
 
 COPY app ./app

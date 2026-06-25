@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
 from app.agent_graph import run_agent_graph, stream_agent_graph_events
+from app.asr.factory import build_audio_transcriber
 from app.assistants import SUGGESTED_PROMPTS
 from app.auth.allowlist import Allowlist
 from app.auth.context import AuthContext, build_auth_context
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 def create_app(
     settings: Settings | None = None,
     openai_client: object | None = None,
+    audio_transcriber: object | None = None,
     auth_context: AuthContext | None = None,
     auth_allowlist: Allowlist | None = None,
     auth_sms_sender: SmsSender | None = None,
@@ -66,6 +68,13 @@ def create_app(
         if openai_client is not None:
             return openai_client
         return OpenAIClient(settings=active_settings)
+
+    async def get_audio_transcriber() -> object:
+        if audio_transcriber is not None:
+            return audio_transcriber
+        if active_settings.asr_provider.strip().lower() == "tencent":
+            return build_audio_transcriber(active_settings)
+        return await get_openai_client()
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -108,11 +117,24 @@ def create_app(
     async def transcribe_audio(
         device_id: Annotated[str, Form()],
         file: Annotated[UploadFile, File()],
-        client: object = Depends(get_openai_client),
+        transcriber: object = Depends(get_audio_transcriber),
         user: CurrentUser = Depends(require_user),
     ) -> dict[str, str]:
         ensure_allowed(limiter, _rate_key(user, device_id))
         content = await file.read()
+        logger.info(
+            "Audio upload received: filename=%s content_type=%s bytes=%s head=%s",
+            file.filename,
+            file.content_type,
+            len(content),
+            content[:12].hex(),
+        )
+        if not content:
+            raise coded_http_error(
+                status_code=400,
+                code="audio_empty",
+                message="录音文件为空，请重新录制。",
+            )
         if len(content) > active_settings.max_audio_bytes:
             raise coded_http_error(
                 status_code=413,
@@ -120,13 +142,19 @@ def create_app(
                 message="Audio file exceeds the configured upload limit.",
             )
         try:
-            text = await client.transcribe_audio(
+            text = await transcriber.transcribe_audio(
                 content=content,
-                filename=file.filename or "audio.m4a",
+                filename=file.filename or "audio.mp3",
                 content_type=file.content_type or "application/octet-stream",
             )
         except UpstreamServiceError as exc:
-            raise coded_http_error(502, exc.code, exc.message) from exc
+            if exc.code in {"audio_too_large"}:
+                status_code = 413
+            elif exc.code in {"audio_empty", "audio_too_short", "audio_not_decodable"}:
+                status_code = 400
+            else:
+                status_code = 502
+            raise coded_http_error(status_code, exc.code, exc.message) from exc
         return {"text": text}
 
     @app.post("/audio/speech")

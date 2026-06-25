@@ -5,6 +5,8 @@
 .env.*
 !.env.example
 auth/allowlist.yaml
+auth/wechat_bindings.json
+auth/wechat_bindings.json.tmp
 
 # Python caches and virtual environments
 .venv/

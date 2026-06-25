@@ -151,6 +151,7 @@ dependencies = [
     { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "sse-starlette" },
+    { name = "tencentcloud-sdk-python-asr" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -174,6 +175,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "sse-starlette", specifier = ">=3.0.3" },
+    { name = "tencentcloud-sdk-python-asr", specifier = ">=3.1.112" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.38.0" },
 ]
 
@@ -869,6 +871,30 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
+]
+
+[[package]]
+name = "tencentcloud-sdk-python-asr"
+version = "3.1.112"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tencentcloud-sdk-python-common" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/d7/727257c962e0e4f650de5a763bd67ec3d0feda1918623384ebbd5cdbeed1/tencentcloud_sdk_python_asr-3.1.112.tar.gz", hash = "sha256:2d0a91cbd56f1378effa99e8383da105dba1d7ca736a077ae3d1c0752bc22c32", size = 43854, upload-time = "2026-06-11T03:44:30.405Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/91/3dc71ed60790374f75580a765ce6999230f9ac81c7c256eca5bb25b3459b/tencentcloud_sdk_python_asr-3.1.112-py2.py3-none-any.whl", hash = "sha256:4a00731429c6e7c851213f3d9038d5ec8eeddcfc69082c2759f0d4c2531b9c15", size = 47021, upload-time = "2026-06-11T03:44:27.985Z" },
+]
+
+[[package]]
+name = "tencentcloud-sdk-python-common"
+version = "3.1.122"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b5/cf/c6b2762a9612e42fd92fa27332c5926c6a24addec39a3a3930f2f06dcbb8/tencentcloud_sdk_python_common-3.1.122.tar.gz", hash = "sha256:7b1ca29365175e9fac2c24d67622b677a3198e0fcf40ea2153fafb971e445ea2", size = 22687, upload-time = "2026-06-25T04:04:26.441Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/e6/ba8b8763c32cd6f0b407244b6e18b66da4daf52097bc779a744ddf8361cc/tencentcloud_sdk_python_common-3.1.122-py2.py3-none-any.whl", hash = "sha256:2080888209ad39a64408b029145418202137931a6a21abc85dbc3bad61b81af0", size = 34274, upload-time = "2026-06-25T04:04:24.333Z" },
 ]
 
 [[package]]

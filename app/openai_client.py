@@ -108,48 +108,95 @@ class OpenAIClient:
                     continue
 
     async def transcribe_audio(self, content: bytes, filename: str, content_type: str) -> str:
+        models = self._transcribe_model_candidates()
+        last_error: UpstreamServiceError | None = None
+
+        async with self._client() as client:
+            for index, model in enumerate(models):
+                max_attempts = None
+                if index < len(models) - 1:
+                    max_attempts = max(1, self.settings.openai_max_retries + 1)
+                try:
+                    return await self._transcribe_with_model(
+                        client,
+                        content,
+                        filename,
+                        content_type,
+                        model,
+                        max_attempts=max_attempts,
+                    )
+                except UpstreamServiceError as exc:
+                    last_error = exc
+
+        if last_error is not None:
+            raise last_error
+        raise UpstreamServiceError(
+            code="upstream_transcription_invalid_response",
+            message="No transcription model configured.",
+        )
+
+    def _transcribe_model_candidates(self) -> list[str]:
+        candidates: list[str] = []
+        for model in (
+            self.settings.openai_transcribe_model.strip(),
+            self.settings.openai_transcribe_fallback_model.strip(),
+        ):
+            if model and model not in candidates:
+                candidates.append(model)
+        return candidates
+
+    async def _transcribe_with_model(
+        self,
+        client: httpx.AsyncClient,
+        content: bytes,
+        filename: str,
+        content_type: str,
+        model: str,
+        *,
+        max_attempts: int | None = None,
+    ) -> str:
         files = {
             "file": (filename, content, content_type),
         }
         data = {
-            "model": self.settings.openai_transcribe_model,
+            "model": model,
             "response_format": "json",
         }
         language = self.settings.openai_transcribe_language.strip()
         if language:
             data["language"] = language
 
-        async with self._client() as client:
-            response = await self._post_audio_request(
-                client,
-                "/audio/transcriptions",
-                data=data,
-                files=files,
+        response = await self._post_audio_request(
+            client,
+            "/audio/transcriptions",
+            data=data,
+            files=files,
+            max_attempts=max_attempts,
+        )
+        content_type_header = response.headers.get("content-type", "")
+        if "json" not in content_type_header.lower():
+            raise UpstreamServiceError(
+                code="upstream_transcription_invalid_response",
+                message=(
+                    "Upstream audio transcription did not return JSON. "
+                    "Please verify OPENAI_BASE_URL supports audio APIs."
+                ),
             )
-            content_type_header = response.headers.get("content-type", "")
-            if "json" not in content_type_header.lower():
-                raise UpstreamServiceError(
-                    code="upstream_transcription_invalid_response",
-                    message=(
-                        "Upstream audio transcription did not return JSON. "
-                        "Please verify OPENAI_BASE_URL supports audio APIs."
-                    ),
-                )
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise UpstreamServiceError(
-                    code="upstream_transcription_invalid_response",
-                    message="Upstream audio transcription returned malformed JSON.",
-                ) from exc
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise UpstreamServiceError(
+                code="upstream_transcription_invalid_response",
+                message="Upstream audio transcription returned malformed JSON.",
+            ) from exc
 
-            text = str(payload.get("text", "")).strip()
-            if not text:
-                raise UpstreamServiceError(
-                    code="upstream_transcription_invalid_response",
-                    message="Upstream audio transcription returned an empty transcript.",
-                )
-            return text
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            raise UpstreamServiceError(
+                code="upstream_transcription_invalid_response",
+                message="Upstream audio transcription returned an empty transcript.",
+            )
+        return text
 
     async def create_speech(self, text: str) -> SpeechResult:
         payload = {
@@ -176,8 +223,11 @@ class OpenAIClient:
                 )
             return SpeechResult(content=response.content, media_type=media_type)
 
-    async def _sleep_before_retry(self, attempt: int) -> None:
-        backoff = self.settings.openai_retry_backoff_seconds * (2**attempt)
+    async def _sleep_before_retry(self, attempt: int, *, rate_limited: bool = False) -> None:
+        base = self.settings.openai_retry_backoff_seconds
+        if rate_limited:
+            base = max(base, 2.0)
+        backoff = base * (2**attempt)
         if backoff > 0:
             await asyncio.sleep(backoff)
 
@@ -224,9 +274,14 @@ class OpenAIClient:
         self,
         client: httpx.AsyncClient,
         path: str,
+        *,
+        max_attempts: int | None = None,
         **kwargs: object,
     ) -> httpx.Response:
-        max_attempts = max(1, self.settings.openai_max_retries + 1)
+        if max_attempts is None:
+            max_attempts = max(max(1, self.settings.openai_max_retries + 1), 4)
+        else:
+            max_attempts = max(1, max_attempts)
         for attempt in range(max_attempts):
             try:
                 response = await client.post(
@@ -239,7 +294,10 @@ class OpenAIClient:
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code
                 if status_code in TRANSIENT_STATUS_CODES and attempt + 1 < max_attempts:
-                    await self._sleep_before_retry(attempt)
+                    await self._sleep_before_retry(
+                        attempt,
+                        rate_limited=status_code == 429,
+                    )
                     continue
                 upstream_message = extract_upstream_error_message(exc.response)
                 base_message = (

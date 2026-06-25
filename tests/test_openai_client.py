@@ -206,6 +206,34 @@ async def test_transcribe_audio_rejects_non_json_gateway_response() -> None:
 
 
 @pytest.mark.asyncio
+async def test_transcribe_audio_falls_back_when_primary_model_fails() -> None:
+    attempts: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = request.content.decode("latin-1")
+        if "whisper-1" in body:
+            attempts.append("whisper-1")
+            return httpx.Response(
+                429,
+                json={"error": {"message": "upstream saturated"}},
+            )
+        if "gpt-4o-mini-transcribe" in body:
+            attempts.append("gpt-4o-mini-transcribe")
+            return httpx.Response(200, json={"text": "备用模型成功"})
+        raise AssertionError(f"unexpected request body: {body[:200]}")
+
+    transport = httpx.MockTransport(handler)
+    settings = build_settings()
+    settings = settings.model_copy(update={"openai_max_retries": 0})
+    async with httpx.AsyncClient(transport=transport, base_url=settings.openai_base_url) as client:
+        openai = OpenAIClient(settings=settings, http_client=client)
+        text = await openai.transcribe_audio(b"fake-audio", "voice.m4a", "audio/mp4")
+
+    assert text == "备用模型成功"
+    assert attempts == ["whisper-1", "gpt-4o-mini-transcribe"]
+
+
+@pytest.mark.asyncio
 async def test_create_speech_rejects_non_audio_gateway_response() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/audio/speech"
